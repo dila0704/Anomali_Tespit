@@ -40,8 +40,7 @@ def log_ayristir(dosya_yolu):
     df['IP_Adresi'] = df['IP_Adresi'].str.extract(r'ipv4:(.*?):')
 
     # 6. Saat/zaman analizi yapabilmek için metin formatındaki tarihi DateTime objesine dönüştürüyorum
-    df['Zaman'] = pd.to_datetime(df['Zaman'])
-
+    df['Zaman'] = pd.to_datetime(df['Zaman'], utc=True)
     return df
 
 # ÇALIŞTIRMA VE KAYDETME KISMI
