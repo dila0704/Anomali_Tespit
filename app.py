@@ -18,31 +18,73 @@ st.set_page_config(
 )
 
 # ============================================================
-# 2. KURUMSAL CSS TEMASI
+# 2. KURUMSAL SOC (GÜVENLİK MERKEZİ) CSS TEMASI
 # ============================================================
 st.markdown("""
 <style>
-    .main { background-color: #0e1117; }
+    /* Arka Plan ve Genel Metin */
+    .main { background-color: #0b0f19; }
+    
+    /* Ana Başlık Kartı */
     .main-header {
-        background: linear-gradient(90deg, #1a1c24 0%, #23262f 100%);
-        padding: 1.5rem 2rem;
-        border-radius: 12px;
-        border-left: 5px solid #ff4b4b;
-        margin-bottom: 1.5rem;
+        background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+        padding: 2rem;
+        border-radius: 16px;
+        border: 1px solid #334155;
+        border-left: 6px solid #3b82f6;
+        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        margin-bottom: 2rem;
     }
-    .main-header h1 { color: #fafafa; margin: 0; font-size: 1.8rem; font-weight: 700; }
-    .main-header p { color: #9ca3af; margin: 0.3rem 0 0 0; font-size: 0.9rem; }
+    .main-header h1 { color: #f8fafc; margin: 0; font-size: 2.2rem; font-weight: 800; letter-spacing: -0.5px;}
+    .main-header p { color: #94a3b8; margin: 0.5rem 0 0 0; font-size: 1rem; }
+    
+    /* Metrik Kartları (Glassmorphism ve Hover) */
     div[data-testid="stMetric"] {
-        background-color: #1a1c24;
-        border: 1px solid #2d3039;
-        border-radius: 10px;
-        padding: 1rem;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+        background: #1e293b;
+        border: 1px solid #334155;
+        border-radius: 12px;
+        padding: 1.2rem;
+        box-shadow: inset 0 2px 4px 0 rgba(255, 255, 255, 0.02);
+        transition: all 0.3s ease;
     }
-    div[data-testid="stMetric"] label { color: #9ca3af !important; font-weight: 500; }
-    section[data-testid="stSidebar"] { background-color: #14161c; border-right: 1px solid #2d3039; }
-    h2, h3 { color: #fafafa !important; border-bottom: 1px solid #2d3039; padding-bottom: 0.4rem; }
-    .footer-note { color: #6b7280; font-size: 0.8rem; text-align: center; margin-top: 2rem; }
+    div[data-testid="stMetric"]:hover {
+        transform: translateY(-5px);
+        border-color: #3b82f6;
+        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.2);
+    }
+    div[data-testid="stMetric"] label { color: #94a3b8 !important; font-weight: 600; font-size: 0.95rem; }
+    div[data-testid="stMetric"] div[data-testid="stMetricValue"] { color: #f8fafc; font-weight: 700; }
+    
+    /* Sidebar Tasarımı */
+    section[data-testid="stSidebar"] { 
+        background-color: #0f172a; 
+        border-right: 1px solid #1e293b; 
+    }
+    
+    /* Sekmeler (Tabs) */
+    .stTabs [data-baseweb="tab-list"] { gap: 2rem; border-bottom: 2px solid #1e293b; }
+    .stTabs [data-baseweb="tab"] { 
+        height: 55px; 
+        white-space: pre-wrap; 
+        font-size: 1.15rem; 
+        font-weight: 600;
+        color: #94a3b8;
+    }
+    .stTabs [aria-selected="true"] { color: #3b82f6 !important; }
+    
+    /* Arama/Filtre Kutusu */
+    .search-box {
+        background-color: #1e293b;
+        padding: 1.5rem;
+        border-radius: 12px;
+        border: 1px solid #334155;
+        margin-bottom: 1.5rem;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    }
+    
+    h2, h3, h4 { color: #f1f5f9 !important; }
+    hr { border-color: #334155 !important; }
+    .footer-note { color: #64748b; font-size: 0.85rem; text-align: center; margin-top: 3rem; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -51,52 +93,52 @@ st.markdown("""
 # ============================================================
 st.markdown(f"""
 <div class="main-header">
-    <h1>🛡️ Anomali Tespit Merkezi</h1>
-    <p>Hibrit Kural Tabanlı + YZ Destekli Log Analiz Paneli · Son güncelleme: {datetime.now().strftime('%d.%m.%Y %H:%M')}</p>
+    <h1>🛡️ Merkezi Siber Tehdit Analiz Paneli</h1>
+    <p>Hibrit Karar Motoru (Kural + YZ) · Gerçek Zamanlı İzleme · Son güncelleme: {datetime.now().strftime('%d.%m.%Y %H:%M')}</p>
 </div>
 """, unsafe_allow_html=True)
 
 # ============================================================
-# 4. VERİ ÇEKME VE SIRALAMA (YENİ)
+# 4. VERİ ÇEKME VE SIRALAMA (PERFORMANS OPTİMİZASYONU)
 # ============================================================
-@st.cache_data(ttl=300, show_spinner="Veriler yükleniyor...")
+@st.cache_data(ttl=300, show_spinner="Veriler getiriliyor...")
 def veriyi_getir():
     baglanti = sqlite3.connect("log_veritabani.db")
-    df = pd.read_sql("SELECT * FROM hibrit_tespit_sonuclari", baglanti)
+    # PERFORMANS: Tüm veritabanı yerine arayüzü hızlandırmak için son 50 bin log çekiliyor
+    df = pd.read_sql("SELECT * FROM hibrit_tespit_sonuclari ORDER BY Zaman DESC LIMIT 50000", baglanti)
     baglanti.close()
     
     if 'Zaman' in df.columns:
         df['Zaman'] = pd.to_datetime(df['Zaman'], errors='coerce')
-        # KRİTİK DÜZELTME: En yeni logları en üstte görmek için tarihe göre tersten sıralıyoruz
+        # Zaten SQL'de sıraladık ama güvenlik amaçlı pandas ile de emin olalım
         df = df.sort_values(by='Zaman', ascending=False).reset_index(drop=True)
         
     return df
 
-df = veriyi_getir()
+df_orijinal = veriyi_getir()
 
-if df.empty:
-    st.warning("Veritabanında görüntülenecek kayıt bulunamadı.")
+if df_orijinal.empty:
+    st.warning("Veritabanında görüntülenecek kayıt bulunamadı. Lütfen analiz motorunu çalıştırın.")
     st.stop()
 
 # ============================================================
-# 5. SIDEBAR - KONTROL PANELİ
+# 5. SIDEBAR - SİSTEM KONTROLLERİ
 # ============================================================
 with st.sidebar:
-    st.markdown("## ⚙️ Kontrol Paneli")
+    st.markdown("## ⚙️ Operasyon Merkezi")
     
-    if st.button("🔄 Logları Yenile ve Analiz Et", use_container_width=True):
-        with st.spinner("Yeni loglar analiz ediliyor..."):
+    if st.button("🚀 Yeni Logları İncele (Delta)", use_container_width=True):
+        with st.spinner("Model tahmin modunda çalışıyor..."):
             try:
                 subprocess.run([sys.executable, "pipeline_calistir.py"], check=True)
                 st.cache_data.clear()
-                st.success("Analiz tamamlandı!")
+                st.success("Tarama tamamlandı!")
                 time.sleep(1)
                 st.rerun()
             except subprocess.CalledProcessError:
                 st.error("Analiz motoru hatası. Terminali kontrol edin.")
     
     st.markdown("---")
-    
     st.markdown("### 🕒 Zaman Aralığı")
     zaman_dilimi = st.radio(
         "Görüntüleme Periyodu:",
@@ -104,107 +146,66 @@ with st.sidebar:
     )
     
     st.markdown("---")
-    st.markdown("### 🔍 İhlal Filtresi")
-    kurallar = df[df['Kural_Ihlali'] != 'Yok']['Kural_Ihlali'].unique()
-    secilen_kural = st.multiselect("Kural İhlali Türü:", options=kurallar, default=list(kurallar))
+    st.markdown("### ⚠️ Alarm Filtresi")
+    kurallar = df_orijinal[df_orijinal['Kural_Ihlali'] != 'Yok']['Kural_Ihlali'].unique()
+    secilen_kural = st.multiselect("Tehdit Vektörü Seçin:", options=kurallar, default=list(kurallar))
 
     st.markdown("---")
-    st.markdown("### 🖥️ Performans Ayarları")
+    st.markdown("### 🖥️ Arayüz Performansı")
     max_satir = st.slider(
-        "Tabloda gösterilecek maksimum satır:",
-        min_value=100, max_value=min(20000, max(len(df), 100)), value=min(2000, len(df)), step=100
+        "Tablo Satır Sınırı:",
+        min_value=100, max_value=2000, value=500, step=100
     )
 
-# --- 30 DAKİKALIK ZAMAN FİLTRESİ ---
-son_tarih = df['Zaman'].max()
+# ============================================================
+# 6. ANA EKRAN - HEDEF ODAKLI İNCELEME
+# ============================================================
+st.markdown("<div class='search-box'>", unsafe_allow_html=True)
+st.markdown("### 🎯 Nokta Atışı İzleme")
+arama_col1, arama_col2 = st.columns(2)
+
+with arama_col1:
+    kullanicilar = ["Tümü"] + list(df_orijinal['Kullanici'].dropna().unique())
+    secilen_kullanici = st.selectbox("👤 Kullanıcı / Hesap Araştırması:", options=kullanicilar)
+
+with arama_col2:
+    ipler = ["Tümü"] + list(df_orijinal['IP_Adresi'].dropna().unique())
+    secilen_ip = st.selectbox("🌐 Kaynak IP Araştırması:", options=ipler)
+st.markdown("</div>", unsafe_allow_html=True)
+
+# ============================================================
+# 7. FİLTRELERİ UYGULAMA
+# ============================================================
+df_filtrelenmis = df_orijinal.copy()
+
+if secilen_kullanici != "Tümü":
+    df_filtrelenmis = df_filtrelenmis[df_filtrelenmis['Kullanici'] == secilen_kullanici]
+if secilen_ip != "Tümü":
+    df_filtrelenmis = df_filtrelenmis[df_filtrelenmis['IP_Adresi'] == secilen_ip]
+
+son_tarih = df_filtrelenmis['Zaman'].max() if not df_filtrelenmis.empty else pd.Timestamp.now()
 
 if zaman_dilimi == "Günlük (Son 24 Saat)":
     baslangic = son_tarih - pd.Timedelta(days=1)
-    df = df[df['Zaman'] >= baslangic]
-    # YENİ: Tam 30 dakikalık dilimlere yuvarlama (20:00, 20:30, 21:00 vb.)
-    df['Zaman_Ekseni'] = df['Zaman'].dt.floor('30min').dt.strftime('%H:%M')
+    df_filtrelenmis = df_filtrelenmis[df_filtrelenmis['Zaman'] >= baslangic]
+    df_filtrelenmis['Zaman_Ekseni'] = df_filtrelenmis['Zaman'].dt.floor('30min').dt.strftime('%H:%M')
     zaman_etiketi = "Saat (30 Dk Periyot)"
 elif zaman_dilimi == "Haftalık (Son 7 Gün)":
     baslangic = son_tarih - pd.Timedelta(days=7)
-    df = df[df['Zaman'] >= baslangic]
-    df['Zaman_Ekseni'] = df['Zaman'].dt.strftime('%Y-%m-%d')
+    df_filtrelenmis = df_filtrelenmis[df_filtrelenmis['Zaman'] >= baslangic]
+    df_filtrelenmis['Zaman_Ekseni'] = df_filtrelenmis['Zaman'].dt.strftime('%Y-%m-%d')
     zaman_etiketi = "Gün"
 else:
     baslangic = son_tarih - pd.Timedelta(days=30)
-    df = df[df['Zaman'] >= baslangic]
-    df['Zaman_Ekseni'] = df['Zaman'].dt.strftime('%Y - %W. Hafta')
+    df_filtrelenmis = df_filtrelenmis[df_filtrelenmis['Zaman'] >= baslangic]
+    df_filtrelenmis['Zaman_Ekseni'] = df_filtrelenmis['Zaman'].dt.strftime('%Y - %W. Hafta')
     zaman_etiketi = "Hafta"
 
 if secilen_kural:
-    filtrelenmis_df = df[df['Kural_Ihlali'].isin(secilen_kural)]
+    df_gorsel_tablo = df_filtrelenmis[df_filtrelenmis['Kural_Ihlali'].isin(secilen_kural)]
 else:
-    filtrelenmis_df = df[df['Kural_Skoru'] > 0]
+    df_gorsel_tablo = df_filtrelenmis[df_filtrelenmis['Kural_Skoru'] > 0]
 
-# ============================================================
-# 6. ÜST METRİK KARTLARI
-# ============================================================
-col1, col2, col3, col4 = st.columns(4)
-with col1: st.metric(label=f"📊 Toplam Log ({zaman_dilimi.split(' ')[0]})", value=f"{len(df):,}")
-with col2: st.metric(label="🎯 Seçili Filtredeki Şüpheliler", value=f"{len(filtrelenmis_df):,}")
-with col3:
-    kesin_tehdit = len(filtrelenmis_df[filtrelenmis_df['Anomali_Durumu'] == 1])
-    st.metric(label="🚨 Kesin Tehdit", value=f"{kesin_tehdit:,}", delta="Alarm" if kesin_tehdit > 0 else "Temiz", delta_color="inverse" if kesin_tehdit > 0 else "off")
-with col4:
-    st.metric(label="⚠️ En Yüksek Skor", value=int(filtrelenmis_df['Kural_Skoru'].max() if not filtrelenmis_df.empty else 0))
-
-st.markdown("---")
-
-# ============================================================
-# 7. GRAFİKLER
-# ============================================================
-st.markdown("### 📈 Tehdit Analizi ve Dağılım Grafikleri")
-grafik_col1, grafik_col2 = st.columns(2)
-renk_paleti = ["#ff4b4b", "#ff8a3d", "#ffc93d", "#4bafff", "#7c4bff", "#4bff8a"]
-
-with grafik_col1:
-    st.markdown("**İhlal Türlerine Göre Dağılım**")
-    ihlal_sayilari = filtrelenmis_df['Kural_Ihlali'].value_counts().reset_index()
-    ihlal_sayilari.columns = ['Ihlal_Turu', 'Adet']
-    if not ihlal_sayilari.empty:
-        fig1 = px.bar(ihlal_sayilari, x='Adet', y='Ihlal_Turu', orientation='h', color='Ihlal_Turu', color_discrete_sequence=renk_paleti, text='Adet')
-        fig1.update_layout(plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', font_color='#fafafa', showlegend=False, yaxis_title="", xaxis_title="Kayıt Sayısı", margin=dict(l=10, r=10, t=20, b=10), height=380)
-        
-        # Sütun kalınlık kontrolü
-        satir_sayisi = len(ihlal_sayilari)
-        if satir_sayisi == 1: fig1.update_traces(textposition='outside', width=0.2)
-        elif satir_sayisi == 2: fig1.update_traces(textposition='outside', width=0.4)
-        else: fig1.update_traces(textposition='outside')
-            
-        st.plotly_chart(fig1, use_container_width=True)
-
-with grafik_col2:
-    st.markdown(f"**Tehdit Aktivitesi ({zaman_etiketi})**")
-    if 'Zaman_Ekseni' in filtrelenmis_df.columns and not filtrelenmis_df.empty:
-        zaman_dagilimi = filtrelenmis_df['Zaman_Ekseni'].value_counts().sort_index().reset_index()
-        zaman_dagilimi.columns = ['Zaman_Ekseni', 'Adet']
-        fig2 = px.area(zaman_dagilimi, x='Zaman_Ekseni', y='Adet', markers=True, color_discrete_sequence=["#ff4b4b"])
-        fig2.update_layout(plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', font_color='#fafafa', xaxis_title=zaman_etiketi, yaxis_title="Kayıt Sayısı", margin=dict(l=10, r=10, t=20, b=10), height=380)
-        
-        # Grafiğin X eksenini string sırasına göre değil, kategorik sıraya göre dizmeye zorlama
-        fig2.update_xaxes(type='category')
-        
-        st.plotly_chart(fig2, use_container_width=True)
-
-st.markdown("---")
-
-# ============================================================
-# 8. DETAYLI VERİ TABLOSU
-# ============================================================
-# ============================================================
-# 8. DETAYLI VERİ TABLOSU (KULLANICI DOSTU GÖRÜNÜM)
-# ============================================================
-st.markdown(f"### 🗂️ Detaylı Anomali Özellikleri - {zaman_dilimi.split(' ')[0]} Görünüm")
-st.caption("Not: En yeni üretilen kayıtlar her zaman en üstte gösterilir.")
-
-# Kullanıcıya göstereceğimiz tablo için verinin kopyasını alıyoruz
-tablo_df = filtrelenmis_df.head(max_satir).copy()
-
-# 1. Karmaşık durum kodlarını emojili Türkçe metinlere çeviriyoruz
 durum_sozlugu = {
     'NT_STATUS_WRONG_PASSWORD': '❌ Hatalı Şifre',
     'NT_STATUS_OK': '✅ Başarılı Giriş',
@@ -212,49 +213,149 @@ durum_sozlugu = {
     'NT_STATUS_PASSWORD_EXPIRED': '⏳ Şifre Süresi Doldu',
     'NT_STATUS_LOGON_FAILURE': '🚫 Giriş Başarısız'
 }
-if 'Durum' in tablo_df.columns:
-    tablo_df['Durum'] = tablo_df['Durum'].replace(durum_sozlugu)
 
-# 2. Yapay Zeka (Anomali) durumunu 0-1 yerine şık bir etikete çeviriyoruz
-if 'Anomali_Durumu' in tablo_df.columns:
-    tablo_df['Anomali_Durumu'] = tablo_df['Anomali_Durumu'].apply(
-        lambda x: '🚨 Kesin Tehdit' if x == 1 else '➖ İncelemede'
-    )
+# ============================================================
+# 8. SEKMELİ YAPI (TABS)
+# ============================================================
+tab1, tab2 = st.tabs(["📈 Genel Tehdit Pano", "🕵️‍♂️ Derinlemesine Profil (UBA)"])
 
-# 3. Tarih formatını saniyelerle birlikte temiz bir görünüme sokuyoruz
-if 'Zaman' in tablo_df.columns:
-    tablo_df['Zaman'] = tablo_df['Zaman'].dt.strftime('%d.%m.%Y %H:%M:%S')
+# ----------------- SEKME 1: GENEL PANO -----------------
+with tab1:
+    col1, col2, col3, col4 = st.columns(4)
+    with col1: st.metric(label=f"📊 İşlenen Log ({zaman_dilimi.split(' ')[0]})", value=f"{len(df_filtrelenmis):,}")
+    with col2: st.metric(label="🎯 Şüpheli Aktivite Sayısı", value=f"{len(df_gorsel_tablo):,}")
+    with col3:
+        kesin_tehdit = len(df_gorsel_tablo[df_gorsel_tablo['Anomali_Durumu'] == 1])
+        st.metric(label="🚨 Yapay Zeka Onaylı Tehdit", value=f"{kesin_tehdit:,}", delta="Kritik Alarm" if kesin_tehdit > 0 else "Temiz", delta_color="inverse" if kesin_tehdit > 0 else "off")
+    with col4:
+        st.metric(label="⚠️ Zirve Risk Skoru", value=int(df_gorsel_tablo['Kural_Skoru'].max() if not df_gorsel_tablo.empty else 0))
 
-# 4. Sadece analistin işine yarayacak kritik sütunları seçip, isimlerini Türkçeleştiriyoruz
-gosterilecek_sutunlar = []
-yeni_isimler = {}
+    st.markdown("<br>", unsafe_allow_html=True)
+    st.markdown("### 📈 Tehdit Vektörü ve Zamansal Dağılım")
+    grafik_col1, grafik_col2 = st.columns(2)
+    renk_paleti = ["#ef4444", "#f97316", "#eab308", "#3b82f6", "#8b5cf6", "#10b981"]
 
-sutun_haritasi = {
-    'Zaman': '📅 Tarih / Saat',
-    'Kullanici': '👤 Kullanıcı',
-    'IP_Adresi': '🌐 Kaynak IP',
-    'Durum': 'Durum',
-    'Olay_ID': '🏷️ Olay ID',
-    'Kural_Ihlali': '⚠️ Tetiklenen Kural',
-    'Kural_Skoru': '📈 Risk Skoru',
-    'Anomali_Durumu': '🤖 YZ Kararı'
-}
+    with grafik_col1:
+        st.markdown("**İhlal Türlerine Göre Risk Dağılımı**")
+        ihlal_sayilari = df_gorsel_tablo['Kural_Ihlali'].value_counts().reset_index()
+        ihlal_sayilari.columns = ['Ihlal_Turu', 'Adet']
+        if not ihlal_sayilari.empty:
+            fig1 = px.bar(ihlal_sayilari, x='Adet', y='Ihlal_Turu', orientation='h', color='Ihlal_Turu', color_discrete_sequence=renk_paleti, text='Adet')
+            fig1.update_layout(plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', font_color='#f1f5f9', showlegend=False, yaxis_title="", xaxis_title="Olay Sayısı", margin=dict(l=10, r=10, t=20, b=10), height=340)
+            fig1.update_traces(textposition='outside')
+            st.plotly_chart(fig1, use_container_width=True)
 
-for ham_isim, yeni_isim in sutun_haritasi.items():
-    if ham_isim in tablo_df.columns:
-        gosterilecek_sutunlar.append(ham_isim)
-        yeni_isimler[ham_isim] = yeni_isim
+    with grafik_col2:
+        st.markdown(f"**Zamana Bağlı Atak Grafiği ({zaman_etiketi})**")
+        if 'Zaman_Ekseni' in df_gorsel_tablo.columns and not df_gorsel_tablo.empty:
+            zaman_dagilimi = df_gorsel_tablo['Zaman_Ekseni'].value_counts().sort_index().reset_index()
+            zaman_dagilimi.columns = ['Zaman_Ekseni', 'Adet']
+            fig2 = px.area(zaman_dagilimi, x='Zaman_Ekseni', y='Adet', markers=True, color_discrete_sequence=["#ef4444"])
+            fig2.update_layout(plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', font_color='#f1f5f9', xaxis_title=zaman_etiketi, yaxis_title="Olay Sayısı", margin=dict(l=10, r=10, t=20, b=10), height=340)
+            fig2.update_xaxes(type='category')
+            st.plotly_chart(fig2, use_container_width=True)
 
-# Tabloyu son haline getir (Filtrele ve Yeniden İsimlendir)
-if gosterilecek_sutunlar:
-    tablo_df = tablo_df[gosterilecek_sutunlar].rename(columns=yeni_isimler)
+    st.markdown("<hr>", unsafe_allow_html=True)
+    st.markdown(f"### 🗂️ Canlı Sistem Kayıtları (Tehdit Logları)")
+    tablo_df = df_gorsel_tablo.head(max_satir).copy()
+    if 'Durum' in tablo_df.columns: tablo_df['Durum'] = tablo_df['Durum'].replace(durum_sozlugu)
+    if 'Anomali_Durumu' in tablo_df.columns: tablo_df['Anomali_Durumu'] = tablo_df['Anomali_Durumu'].apply(lambda x: '🚨 YZ Onaylı Tehdit' if x == 1 else '➖ Manuel İnceleme')
+    if 'Zaman' in tablo_df.columns: tablo_df['Zaman'] = tablo_df['Zaman'].dt.strftime('%d.%m.%Y %H:%M:%S')
 
-# Tabloyu Streamlit üzerinde daha şık (indeks numaraları gizlenmiş şekilde) çizdir
-st.dataframe(
-    tablo_df,
-    use_container_width=True,
-    height=450,
-    hide_index=True # Soldaki 41126 gibi kafa karıştıran satır numaralarını gizler
-)
+    gosterilecek_sutunlar = [col for col in ['Zaman', 'Kullanici', 'IP_Adresi', 'Durum', 'Kural_Ihlali', 'Kural_Skoru', 'Anomali_Durumu'] if col in tablo_df.columns]
+    yeni_isimler = {'Zaman': '📅 Tarih/Saat', 'Kullanici': '👤 Hedef Hesap', 'IP_Adresi': '🌐 Saldırgan IP', 'Kural_Ihlali': '⚠️ İhlal Edilen Kural', 'Kural_Skoru': '📈 Risk Skoru', 'Anomali_Durumu': '🤖 Sistem Kararı'}
+    
+    if gosterilecek_sutunlar:
+        st.dataframe(tablo_df[gosterilecek_sutunlar].rename(columns=yeni_isimler), use_container_width=True, height=400, hide_index=True)
 
-st.markdown("<div class='footer-note'>Anomali Tespit Merkezi · Hibrit Tespit Motoru</div>", unsafe_allow_html=True)
+
+# ----------------- SEKME 2: PROFİL VE DAVRANIŞ (UBA) -----------------
+with tab2:
+    if secilen_kullanici == "Tümü" and secilen_ip == "Tümü":
+        st.info("👆 Lütfen Davranış Analizi (UBA) yapmak için yukarıdaki **Nokta Atışı İzleme** menüsünden spesifik bir Kullanıcı veya Kaynak IP seçin.")
+    else:
+        if secilen_kullanici != "Tümü" and secilen_ip != "Tümü":
+            profil_baslik = f"{secilen_kullanici} Hesabı ve {secilen_ip} Ağı"
+        elif secilen_kullanici != "Tümü":
+            profil_baslik = f"👤 {secilen_kullanici} Hesabı"
+        else:
+            profil_baslik = f"🌐 {secilen_ip} IP Adresi"
+            
+        st.markdown(f"### {profil_baslik} İçin Dijital Ayak İzi")
+        
+        kullanici_verisi = df_orijinal.copy()
+        if secilen_kullanici != "Tümü":
+            kullanici_verisi = kullanici_verisi[kullanici_verisi['Kullanici'] == secilen_kullanici]
+        if secilen_ip != "Tümü":
+            kullanici_verisi = kullanici_verisi[kullanici_verisi['IP_Adresi'] == secilen_ip]
+        
+        toplam_islem = len(kullanici_verisi)
+        essiz_ip_sayisi = kullanici_verisi['IP_Adresi'].nunique() if not kullanici_verisi.empty else 0
+        
+        kullanici_verisi['Saat'] = kullanici_verisi['Zaman'].dt.hour
+        if not kullanici_verisi.empty:
+            alt_sinir = int(kullanici_verisi['Saat'].quantile(0.10))
+            ust_sinir = int(kullanici_verisi['Saat'].quantile(0.90))
+            if alt_sinir == ust_sinir:
+                saat_araligi = f"{alt_sinir:02d}:00 - {(ust_sinir+1):02d}:00"
+            else:
+                saat_araligi = f"{alt_sinir:02d}:00 - {ust_sinir:02d}:00"
+        else:
+            saat_araligi = "Veri Yetersiz"
+            
+        ihlal_sayisi = len(kullanici_verisi[kullanici_verisi['Kural_Ihlali'] != 'Yok'])
+        
+        p_col1, p_col2, p_col3, p_col4 = st.columns(4)
+        p_col1.metric("Toplam Sistem İzi", f"{toplam_islem:,}")
+        p_col2.metric("Sıçrama Tahtası (Farklı IP)", f"{essiz_ip_sayisi} Adet")
+        p_col3.metric("Rutin Operasyon Saati", saat_araligi)
+        p_col4.metric("Riskli Hareket Sayısı", ihlal_sayisi, delta="İnceleme Gerektirir" if ihlal_sayisi > 0 else "Normal", delta_color="inverse")
+        
+        st.markdown("<hr>", unsafe_allow_html=True)
+        
+        graf_col1, graf_col2 = st.columns(2)
+        
+        with graf_col1:
+            st.markdown("**🕒 Saatlik Etkileşim Yoğunluğu (Profil Sapması)**")
+            if not kullanici_verisi.empty:
+                saatlik = kullanici_verisi['Saat'].value_counts().sort_index().reset_index()
+                saatlik.columns = ['Saat', 'İşlem Sayısı']
+                fig_saat = px.bar(saatlik, x='Saat', y='İşlem Sayısı', color_discrete_sequence=['#3b82f6'])
+                fig_saat.update_layout(plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', font_color='#f1f5f9', xaxis=dict(tickmode='linear', tick0=0, dtick=1), height=300)
+                st.plotly_chart(fig_saat, use_container_width=True)
+                
+        with graf_col2:
+            st.markdown("**📊 Operasyon Karakteristiği (Normal vs Anomali)**")
+            if not kullanici_verisi.empty:
+                kullanici_verisi['Durum_Gorsel'] = kullanici_verisi['Durum'].replace(durum_sozlugu)
+                durum_dagilimi = kullanici_verisi['Durum_Gorsel'].value_counts().reset_index()
+                durum_dagilimi.columns = ['Durum', 'Adet']
+                fig_durum = px.pie(durum_dagilimi, values='Adet', names='Durum', hole=0.45, color_discrete_sequence=renk_paleti)
+                fig_durum.update_layout(plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', font_color='#f1f5f9', height=300)
+                st.plotly_chart(fig_durum, use_container_width=True)
+
+        st.markdown("<hr>", unsafe_allow_html=True)
+
+        st.markdown(f"#### ⚡ Çapraz Davranış Kesiti (Normal & Şüpheli Harmanı)")
+        
+        normal_loglar = kullanici_verisi[kullanici_verisi['Kural_Ihlali'] == 'Yok'].head(5)
+        riskli_loglar = kullanici_verisi[kullanici_verisi['Kural_Ihlali'] != 'Yok'].head(5)
+        
+        son_hareketler = pd.concat([normal_loglar, riskli_loglar]).sort_values(by='Zaman', ascending=False)
+        
+        if son_hareketler.empty:
+            son_hareketler = kullanici_verisi.head(10)
+            
+        if 'Durum' in son_hareketler.columns: son_hareketler['Durum'] = son_hareketler['Durum'].replace(durum_sozlugu)
+        if 'Zaman' in son_hareketler.columns: son_hareketler['Zaman'] = son_hareketler['Zaman'].dt.strftime('%d.%m.%Y %H:%M:%S')
+        if 'Anomali_Durumu' in son_hareketler.columns: son_hareketler['Anomali_Durumu'] = son_hareketler['Anomali_Durumu'].apply(lambda x: '🚨 YZ Onaylı' if x == 1 else ('➖ Manuel' if x == 0 else '✅ Temiz'))
+        
+        if 'Kural_Ihlali' in son_hareketler.columns:
+            son_hareketler['Kural_Ihlali'] = son_hareketler['Kural_Ihlali'].replace('Yok', '✔️ Normal Davranış')
+
+        son_hareketler_sutunlar = [col for col in ['Zaman', 'IP_Adresi', 'Durum', 'Kural_Ihlali', 'Anomali_Durumu'] if col in son_hareketler.columns]
+        son_isimler = {'Zaman': '📅 Tarih/Saat', 'IP_Adresi': '🌐 Bağlantı Adresi', 'Kural_Ihlali': '⚠️ Tetiklenen Kural', 'Anomali_Durumu': '🤖 Karar Mekanizması'}
+        
+        st.dataframe(son_hareketler[son_hareketler_sutunlar].rename(columns=son_isimler), use_container_width=True, hide_index=True)
+
+st.markdown("<div class='footer-note'>🛡️ Merkezi Siber Tehdit Analiz ve Anomali Tespit Modülü</div>", unsafe_allow_html=True)

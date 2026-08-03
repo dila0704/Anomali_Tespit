@@ -78,7 +78,7 @@ if __name__ == "__main__":
     try:
         while True:
             log_uret(test_modu=args.test)
-            bekleme = random.randint(5, 8) if args.test else 60
+            bekleme = random.randint(5, 8) if args.test else 20
             print(f"[-] {bekleme} saniye bekleniyor...\n")
             time.sleep(bekleme)
     except KeyboardInterrupt:
