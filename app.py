@@ -104,16 +104,20 @@ st.markdown(f"""
 @st.cache_data(ttl=300, show_spinner="Veriler getiriliyor...")
 def veriyi_getir():
     baglanti = sqlite3.connect("log_veritabani.db")
-    # PERFORMANS: Tüm veritabanı yerine arayüzü hızlandırmak için son 50 bin log çekiliyor
     df = pd.read_sql("SELECT * FROM hibrit_tespit_sonuclari ORDER BY Zaman DESC LIMIT 50000", baglanti)
     baglanti.close()
     
     if 'Zaman' in df.columns:
         df['Zaman'] = pd.to_datetime(df['Zaman'], errors='coerce')
-        # Zaten SQL'de sıraladık ama güvenlik amaçlı pandas ile de emin olalım
+        
+        # 🐛 HATA ÇÖZÜMÜ: Eğer verilerde Timezone (Zaman Dilimi) varsa, onu temizle
+        if df['Zaman'].dt.tz is not None:
+            df['Zaman'] = df['Zaman'].dt.tz_localize(None)
+            
         df = df.sort_values(by='Zaman', ascending=False).reset_index(drop=True)
         
     return df
+      
 
 df_orijinal = veriyi_getir()
 
@@ -128,10 +132,18 @@ with st.sidebar:
     st.markdown("## ⚙️ Operasyon Merkezi")
     
     if st.button("🚀 Yeni Logları İncele (Delta)", use_container_width=True):
+        # ÖNEMLİ: st.rerun() bu blok içinde çağrıldığı için script bu turda
+        # aşağıdaki "Zaman Aralığı" radio widget'ına hiç ulaşmadan kesiliyor.
+        # Bu yüzden kullanıcının seçtiği periyodu (session_state) burada
+        # elle koruyup rerun'dan sonra geri yazıyoruz; aksi halde seçim
+        # sessizce "Günlük" varsayılanına dönüyordu.
+        secili_periyot = st.session_state.get("zaman_dilimi_hafizasi")
         with st.spinner("Model tahmin modunda çalışıyor..."):
             try:
                 subprocess.run([sys.executable, "pipeline_calistir.py"], check=True)
                 st.cache_data.clear()
+                if secili_periyot:
+                    st.session_state["zaman_dilimi_hafizasi"] = secili_periyot
                 st.success("Tarama tamamlandı!")
                 time.sleep(1)
                 st.rerun()
@@ -142,7 +154,8 @@ with st.sidebar:
     st.markdown("### 🕒 Zaman Aralığı")
     zaman_dilimi = st.radio(
         "Görüntüleme Periyodu:",
-        options=["Günlük (Son 24 Saat)", "Haftalık (Son 7 Gün)", "Aylık (Son 30 Gün)"]
+        options=["Günlük (Son 24 Saat)", "Haftalık (Son 7 Gün)", "Aylık (Son 30 Gün)"],
+        key="zaman_dilimi_hafizasi"
     )
     
     st.markdown("---")
@@ -174,7 +187,7 @@ with arama_col2:
 st.markdown("</div>", unsafe_allow_html=True)
 
 # ============================================================
-# 7. FİLTRELERİ UYGULAMA
+# 7. FİLTRELERİ UYGULAMA (ZAMAN PARADOKSU ÇÖZÜLDÜ)
 # ============================================================
 df_filtrelenmis = df_orijinal.copy()
 
@@ -183,23 +196,32 @@ if secilen_kullanici != "Tümü":
 if secilen_ip != "Tümü":
     df_filtrelenmis = df_filtrelenmis[df_filtrelenmis['IP_Adresi'] == secilen_ip]
 
-son_tarih = df_filtrelenmis['Zaman'].max() if not df_filtrelenmis.empty else pd.Timestamp.now()
+# NOT: Gerçek bilgisayar saati (pd.Timestamp.now()) yerine veritabanındaki
+# EN SON log zamanı baz alınıyor. log_uretici.py simüle saati gerçek zamandan
+# çok daha hızlı ilerlettiği için (30-90 sim-dakika / birkaç saniyede bir),
+# veriler gerçek "şimdi"nin ilerisine geçebiliyor. Gerçek saat referans alınırsa
+# tüm kayıtlar her zaman "günlük/haftalık/aylık" eşiklerinin üstünde kalır ve
+# periyot filtresi hiçbir şeyi değiştirmiyormuş gibi görünür.
+su_an = df_orijinal['Zaman'].max()
 
 if zaman_dilimi == "Günlük (Son 24 Saat)":
-    baslangic = son_tarih - pd.Timedelta(days=1)
+    baslangic = su_an - pd.Timedelta(days=1)
     df_filtrelenmis = df_filtrelenmis[df_filtrelenmis['Zaman'] >= baslangic]
     df_filtrelenmis['Zaman_Ekseni'] = df_filtrelenmis['Zaman'].dt.floor('30min').dt.strftime('%H:%M')
     zaman_etiketi = "Saat (30 Dk Periyot)"
+    metrik_baslik = "Günlük"
 elif zaman_dilimi == "Haftalık (Son 7 Gün)":
-    baslangic = son_tarih - pd.Timedelta(days=7)
+    baslangic = su_an - pd.Timedelta(days=7)
     df_filtrelenmis = df_filtrelenmis[df_filtrelenmis['Zaman'] >= baslangic]
     df_filtrelenmis['Zaman_Ekseni'] = df_filtrelenmis['Zaman'].dt.strftime('%Y-%m-%d')
     zaman_etiketi = "Gün"
+    metrik_baslik = "Haftalık"
 else:
-    baslangic = son_tarih - pd.Timedelta(days=30)
+    baslangic = su_an - pd.Timedelta(days=30)
     df_filtrelenmis = df_filtrelenmis[df_filtrelenmis['Zaman'] >= baslangic]
     df_filtrelenmis['Zaman_Ekseni'] = df_filtrelenmis['Zaman'].dt.strftime('%Y - %W. Hafta')
     zaman_etiketi = "Hafta"
+    metrik_baslik = "Aylık"
 
 if secilen_kural:
     df_gorsel_tablo = df_filtrelenmis[df_filtrelenmis['Kural_Ihlali'].isin(secilen_kural)]
@@ -222,7 +244,8 @@ tab1, tab2 = st.tabs(["📈 Genel Tehdit Pano", "🕵️‍♂️ Derinlemesine 
 # ----------------- SEKME 1: GENEL PANO -----------------
 with tab1:
     col1, col2, col3, col4 = st.columns(4)
-    with col1: st.metric(label=f"📊 İşlenen Log ({zaman_dilimi.split(' ')[0]})", value=f"{len(df_filtrelenmis):,}")
+    # Dinamik başlık eklendi
+    with col1: st.metric(label=f"📊 İşlenen Log ({metrik_baslik})", value=f"{len(df_filtrelenmis):,}")
     with col2: st.metric(label="🎯 Şüpheli Aktivite Sayısı", value=f"{len(df_gorsel_tablo):,}")
     with col3:
         kesin_tehdit = len(df_gorsel_tablo[df_gorsel_tablo['Anomali_Durumu'] == 1])

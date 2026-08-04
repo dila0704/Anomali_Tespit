@@ -104,12 +104,12 @@ if __name__ == "__main__":
     sonuc_df.to_sql("anomali_loglari", baglanti, if_exists=kayit_modu, index=False)
     baglanti.close()
     
-    # 8. Başarıyla işlendiyse, bir sonraki tarama için kalınan yeri kaydet
-    if delta_modu:
-        with open(bookmark_dosyasi, "w") as bf:
-            bf.write(str(yeni_konum))
-    elif os.path.exists(bookmark_dosyasi):
-        # Eğer tam tarama yapıldıysa, veritabanı sıfırlandığı için bookmark dosyasını da sıfırla
-        os.remove(bookmark_dosyasi)
+    # 8. Başarıyla işlendiyse, bir sonraki tarama için kalınan yeri kaydet.
+    # KRİTİK: Tam tarama sonrası bookmark'ı SİLMEK yerine dosyanın o anki son
+    # byte konumuyla YENİDEN YAZIYORUZ. Aksi halde tam taramadan hemen sonra
+    # çalışacak bir delta taraması bookmark'ı bulamaz, dosyayı baştan (byte 0)
+    # okur ve tüm logları mükerrer (duplicate) şekilde tekrar ekler.
+    with open(bookmark_dosyasi, "w") as bf:
+        bf.write(str(yeni_konum))
             
     print(f"İşlem Tamamlandı! {len(sonuc_df)} adet yeni satır SQLite 'log_veritabani.db' dosyasına {kayit_modu.upper()} yöntemiyle aktarıldı.")

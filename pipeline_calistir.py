@@ -33,11 +33,15 @@ def main():
 
     # KRİTİK DÜZELTME: parser_args (yani --delta komutu) artık sadece parser'a değil,
     # özellik çıkarımına, kurallara ve en önemlisi modele de iletiliyor!
+    # SIRALAMA ÖNEMLİ: kural_tabanli_tespit.py, model_egitimi.py'ın ürettiği
+    # "model_sonuclari" tablosunu okur. Model adımı önce çalışmazsa kurallar
+    # bir önceki turdan kalma bayat veriyi görür ve "yeni veri yok" sanıp
+    # pipeline'ı erken durdurur.
     adimlar = [
         ("log_parser.py", parser_args),
         ("ozellik_cikarimi.py", parser_args),
-        ("kural_tabanli_tespit.py", parser_args),
-        ("model_egitimi.py", parser_args) 
+        ("model_egitimi.py", parser_args),
+        ("kural_tabanli_tespit.py", parser_args)
     ]
     
     for script, script_args in adimlar:
