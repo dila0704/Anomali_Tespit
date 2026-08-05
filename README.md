@@ -15,13 +15,14 @@ Gerçek dünyada etiketli anomali verisi bulunmadığından proje, modelin başa
 ## ✨ Özellikler
 
 - **Hibrit tespit motoru:** Kural tabanlı skorlama + Isolation Forest anomali skoru birleşimi
-- **Delta (artımlı) okuma mimarisi:** `bookmark.txt` ile log dosyasındaki son okunan byte konumu takip edilir; her adım (`log_parser.py`, `ozellik_cikarimi.py`, `kural_tabanli_tespit.py`, `model_egitimi.py`) sadece yeni kayıtları işleyip veritabanına **ekler (append)**, tüm veriyi yeniden işlemez
+- **Delta (artımlı) okuma mimarisi:** `bookmark.txt` ile log dosyasındaki son okunan byte konumu takip edilir; her adım (`log_parser.py`, `ozellik_cikarimi.py`, `model_egitimi.py`, `kural_tabanli_tespit.py`) sadece yeni kayıtları işleyip veritabanına **ekler (append)**, tüm veriyi yeniden işlemez
 - **Kısa devre (short-circuit) mantığı:** İşlenecek yeni log yoksa betikler `exit code 99` ile çıkar, `pipeline_calistir.py` bu durumu yakalayıp kalan adımları atlayarak süreci güvenle sonlandırır
 - **Eğitim / Tahmin modu ayrımı:** Tam taramada (`--tam-tarama`) Isolation Forest sıfırdan eğitilip `.pkl` olarak diske kaydedilir; delta modunda ise model diskten yüklenip sadece yeni kayıtlar için hızlı tahmin (`predict`) yapılır, yeniden eğitim yapılmaz
-- **Davranışsal özellik mühendisliği:** Kullanıcı/IP bazlı 10 dakikalık kayan pencere (rolling window) istatistikleri
+- **Davranışsal özellik mühendisliği:** Kullanıcı/IP bazlı 10 dakikalık kayan pencere (rolling window) istatistikleri ve hızlı IP değişimi (impossible travel) tespiti
 - **Model karşılaştırması:** Isolation Forest ile Local Outlier Factor (LOF) sonuçlarının Silhouette skoru üzerinden kıyaslanması
 - **Sentetik veri ile objektif değerlendirme:** Bilinen saldırı örnekleri enjekte edilerek Precision, Recall, F1 ve karmaşıklık matrisi hesaplanır
-- **Canlı log simülatörü:** Brute-force, hesap kilitlenmesi ve bot taraması senaryolarını üreten sürekli çalışan bir simülatör
+- **Canlı log simülatörü:** Her döngüde ağırlıklı rastgele bir senaryo üreten sürekli çalışan bir simülatör — normal başarılı trafik (çoğunluk), brute-force, hesap kilitlenmesi, bot/script taraması, IP sıçraması (impossible travel), olası hesap ele geçirme ve hareketsiz hesap aktivasyonu
+- **Kullanıcı bazlı terminal sorgulama:** `kullanici_sorgula.py` ile belirli bir kullanıcının davranış profili (rutin saat aralığı, en sık IP'ler, başarı oranları, saatlik yoğunluk grafiği) ve log/anomali kayıtları terminalde görüntülenebilir
 - **SOC temalı, sekmeli Streamlit paneli:**
   - **Genel Tehdit Pano** sekmesi: filtrelenebilir tablo, ihlal türü/zaman dağılım grafikleri
   - **Derinlemesine Profil (UBA)** sekmesi: seçilen kullanıcı/IP için dijital ayak izi (toplam işlem, farklı IP sayısı, rutin çalışma saati, riskli hareket sayısı), saatlik yoğunluk grafiği ve normal/anomali durum dağılımı
@@ -68,7 +69,8 @@ flowchart TD
 | Dosya | Açıklama |
 |---|---|
 | `app.py` | SOC temalı, sekmeli (Genel Pano / UBA Profili) Streamlit analiz paneli |
-| `log_uretici.py` | Brute-force, hesap kilitlenmesi ve bot saldırısı senaryolarını simüle eden sürekli log üretici |
+| `kullanici_sorgula.py` | Belirli bir kullanıcının davranış profilini ve log/anomali kayıtlarını terminalde (renkli tablo) gösteren CLI aracı |
+| `log_uretici.py` | Normal trafik, brute-force, hesap kilitlenmesi, bot taraması, IP sıçraması, hesap ele geçirme ve hareketsiz hesap senaryolarını ağırlıklı rastgele üreten sürekli log üretici |
 | `log_parser.py` | Ham JSON Samba audit loglarını ayrıştırıp SQLite'a yazar; `--delta` ile `bookmark.txt` üzerinden sadece yeni satırları okur |
 | `bookmark.txt` | Delta modunda log dosyasında en son okunan byte konumunu tutan takip dosyası (tam taramada sıfırlanır) |
 | `ozellik_cikarimi.py` | Zaman ve davranışsal (rolling window) özellik mühendisliği; `--delta` ile sadece yeni satırları işler |
@@ -92,7 +94,7 @@ cd Anomali_Tespit
 python -m venv venv
 source venv/bin/activate      # Windows: venv\Scripts\activate
 
-pip install streamlit pandas plotly scikit-learn joblib numpy
+pip install streamlit pandas plotly scikit-learn joblib numpy rich
 ```
 
 ## ▶️ Kullanım
@@ -115,7 +117,9 @@ Bu betik, `samba_audit_user_anomaly_dataset_large.log` dosyasına sürekli olara
 python pipeline_calistir.py --tam-tarama
 ```
 
-Bu komut sırasıyla `log_parser.py → ozellik_cikarimi.py → kural_tabanli_tespit.py → model_egitimi.py` betiklerini **tam tarama modunda** çalıştırır, Isolation Forest modelini sıfırdan eğitip `.pkl` dosyalarını oluşturur ve sonuçları `log_veritabani.db` içine yazar.
+Bu komut sırasıyla `log_parser.py → ozellik_cikarimi.py → model_egitimi.py → kural_tabanli_tespit.py` betiklerini **tam tarama modunda** çalıştırır, Isolation Forest modelini sıfırdan eğitip `.pkl` dosyalarını oluşturur ve sonuçları `log_veritabani.db` içine yazar.
+
+> Sıralama önemlidir: `kural_tabanli_tespit.py`, `model_egitimi.py`'ın ürettiği `model_sonuclari` tablosunu okur; bu yüzden model adımı kurallardan **önce** çalışmalıdır. Aksi halde kurallar bir önceki turdan kalma bayat model verisiyle çalışır.
 
 Sonraki çalıştırmalarda argümansız komut varsayılan olarak **delta (artımlı) modda** çalışır; sadece `log_uretici.py`'ın ürettiği yeni loglar işlenir ve mevcut tablolara eklenir:
 
@@ -136,7 +140,16 @@ Panel içindeki **"🚀 Yeni Logları İncele (Delta)"** butonu, `pipeline_calis
 - **📈 Genel Tehdit Pano** sekmesinde metrikler, ihlal/zaman dağılım grafikleri ve son log tablosu,
 - **🕵️‍♂️ Derinlemesine Profil (UBA)** sekmesinde ise "🎯 Nokta Atışı İzleme" alanından seçilen bir kullanıcı veya IP'nin dijital ayak izi, saatlik davranış grafiği ve normal/anomali dağılımı görüntülenir.
 
-### 4. (Opsiyonel) Model başarısını objektif ölçün
+### 4. (Opsiyonel) Bir kullanıcıyı terminalde sorgulayın
+
+```bash
+python kullanici_sorgula.py <kullanici_adi>
+python kullanici_sorgula.py <kullanici_adi> --sadece-anomali --limit 20
+```
+
+Terminalde kullanıcının özet bilgisi, davranış profili (rutin saat aralığı, en sık kullanılan IP'ler, başarısız giriş/mesai dışı/hafta sonu oranları), saatlik aktivite grafiği ve ayrıntılı log tablosu renkli olarak listelenir.
+
+### 5. (Opsiyonel) Model başarısını objektif ölçün
 
 ```bash
 python sentetik_anomali_uretici.py
@@ -145,7 +158,7 @@ python metrikleri_hesapla.py
 
 Bu adım, veriye bilinen 100 sahte saldırı kaydı ekleyip modelin bunları ne oranda yakaladığını Precision/Recall/F1 ile raporlar.
 
-### 5. (Opsiyonel) Isolation Forest'ı LOF ile kıyaslayın
+### 6. (Opsiyonel) Isolation Forest'ı LOF ile kıyaslayın
 
 ```bash
 python lof_model_denemesi.py
@@ -156,7 +169,7 @@ python lof_model_denemesi.py
 Sistem, her seferinde tüm log geçmişini yeniden işlemek yerine yalnızca yeni verileri işleyerek hem `pipeline_calistir.py`'ı hem de panel yenilemesini hızlı tutar:
 
 - **Byte-offset takibi:** `log_parser.py`, `--delta` bayrağıyla çalıştığında `bookmark.txt` içindeki son okunan byte konumundan (`file.seek`) devam eder ve okuma bitince yeni konumu tekrar `bookmark.txt`'e yazar.
-- **Satır sayısı farkı ile delta tespiti:** `ozellik_cikarimi.py` ve `kural_tabanli_tespit.py`, önceki adımdaki tablo ile mevcut tablo arasındaki satır sayısı farkına (`toplam_satir - mevcut_satir`) bakarak yalnızca yeni satırları işleyip hedef tabloya **append** eder.
+- **Satır sayısı farkı ile delta tespiti:** `ozellik_cikarimi.py` ve `kural_tabanli_tespit.py`, önceki adımdaki tablo ile mevcut tablo arasındaki satır sayısı farkına (`toplam_satir - mevcut_satir`) bakarak yalnızca yeni satırları işleyip hedef tabloya **append** eder. `kural_tabanli_tespit.py` bu farkı `model_sonuclari` tablosuna göre hesapladığı için, `model_egitimi.py` pipeline'da ondan **önce** çalışmak zorundadır — aksi halde bayat veri okunur ve pipeline yanlışlıkla "yeni veri yok" sanıp erken durur.
 - **Eğitim vs. Tahmin:** `model_egitimi.py`, tam taramada (`--tam-tarama`) modeli sıfırdan eğitip diske kaydeder ve Silhouette skorunu hesaplar; delta modunda ise diskteki `.pkl` dosyalarını yükleyip sadece `transform` + `predict` çalıştırır (yeniden `fit` yapılmaz), bu da işlem süresini önemli ölçüde kısaltır.
 - **Kısa devre (short-circuit):** İşlenecek yeni veri olmayan bir adım `exit code 99` ile çıkar; `pipeline_calistir.py` bu kodu özel olarak yakalayıp geri kalan adımları atlar ve süreci hatasız olarak sonlandırır. `--tam-tarama` çalıştırıldığında ise tüm tablolar baştan yazılır (`replace`) ve `bookmark.txt` sıfırlanır.
 
@@ -167,9 +180,14 @@ Sistem, her seferinde tüm log geçmişini yeniden işlemek yerine yalnızca yen
 | Kural | Koşul | Risk Skoru |
 |---|---|---|
 | Brute-Force Şüphesi | Son 10 dk içinde 5'ten fazla başarısız giriş | +50 |
-| Mesai Dışı Başarısız Giriş | Mesai dışı veya hafta sonu + başarısız giriş | +30 |
+| Mesai Dışı Başarısız Giriş | Mesai dışı veya hafta sonu + başarısız giriş **ve** son 10 dk içinde en az 2 başarısız deneme | +30 |
 | Bot/Script Şüphesi | Aynı IP'den 1 sn'den kısa aralıklarla 50'den fazla istek | +40 |
+| Uzun Aradan Sonra Ani Aktivite | Kullanıcının bir önceki işleminden bu yana 4 saatten uzun sessizlik | +20 |
+| IP Sıçraması Şüphesi | Kullanıcı, önceki işleminden 5 dk içinde farklı bir IP'den görülüyor (impossible travel) | +35 |
+| Olası Hesap Ele Geçirme | Son 10 dk içinde 3'ten fazla başarısız denemenin ardından başarılı giriş | +60 |
 | Hibrit Onay (YZ + Kural) | Kural skoru > 0 **ve** Isolation Forest da anomali demiş | +100 |
+
+> Not: "Mesai Dışı Başarısız Giriş" kuralına tekrar şartı (≥2 başarısız deneme) eklenmiştir; tek seferlik bir şifre yanlışı (insan hatası) artık anomali sayılmaz. Aksi halde mesai dışı zaman diliminin genişliği (günün ~%54'ü) yüzünden kural aşırı geniş tetikleniyor ve diğer daha spesifik örüntüleri gürültüye boğuyordu.
 
 ## 🗄️ Veritabanı Şeması (SQLite: `log_veritabani.db`)
 
