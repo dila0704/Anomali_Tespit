@@ -37,7 +37,15 @@ class HibritGuvenlikSistemi:
         df.loc[brute_force_sarti, 'Kural_Skoru'] += 50
 
         # KURAL 2: Mesai Dışı / Hafta Sonu
-        mesai_disi_sarti = ((df['Mesai_Disi'] == 1) | (df['Hafta_Sonu'] == 1)) & (df['Basarisiz_Giris_Mi'] == 1)
+        # NOT: Tek seferlik bir şifre yanlışı (insan hatası) anomali sayılmasın diye
+        # son 10 dk içinde en az 2 başarısız deneme şartı eklendi; aksi halde bu kural
+        # mesai dışı zaman diliminin genişliği (günün ~%54'ü) yüzünden aşırı geniş
+        # tetikleniyor ve gerçek şüpheli örüntüleri "gürültüye" boğuyordu.
+        mesai_disi_sarti = (
+            ((df['Mesai_Disi'] == 1) | (df['Hafta_Sonu'] == 1)) &
+            (df['Basarisiz_Giris_Mi'] == 1) &
+            (df['Son_10Dk_Basarisiz_Deneme'] >= 2)
+        )
         df.loc[mesai_disi_sarti, 'Kural_Ihlali'] = "Mesai Dışı Başarısız Giriş"
         df.loc[mesai_disi_sarti, 'Kural_Skoru'] += 30
 
@@ -46,7 +54,23 @@ class HibritGuvenlikSistemi:
         df.loc[bot_sarti, 'Kural_Ihlali'] = "Bot/Script Şüphesi"
         df.loc[bot_sarti, 'Kural_Skoru'] += 40
 
-        # KURAL 4: HİBRİT TESPİT (Yapay Zeka + Kural Ortak Kararı)
+        # KURAL 4: Uzun Aradan Sonra Ani Aktivite (Hareketsiz Hesap)
+        hareketsiz_sarti = df['Onceki_Islem_Farki_Sn'] > 14400  # 4 saatten uzun sessizlik sonrası
+        df.loc[hareketsiz_sarti, 'Kural_Ihlali'] = "Uzun Aradan Sonra Ani Aktivite"
+        df.loc[hareketsiz_sarti, 'Kural_Skoru'] += 20
+
+        # KURAL 5: IP Sıçraması (Impossible Travel) Şüphesi
+        ip_sicrama_sarti = df['IP_Degisti_Hizli'] == 1
+        df.loc[ip_sicrama_sarti, 'Kural_Ihlali'] = "IP Sıçraması Şüphesi"
+        df.loc[ip_sicrama_sarti, 'Kural_Skoru'] += 35
+
+        # KURAL 6: Şüpheli Başarılı Giriş (Olası Hesap Ele Geçirme)
+        # Kısa süre önce çok sayıda başarısız denemenin ardından başarılı giriş.
+        ele_gecirme_sarti = (df['Son_10Dk_Basarisiz_Deneme'] > 3) & (df['Basarisiz_Giris_Mi'] == 0)
+        df.loc[ele_gecirme_sarti, 'Kural_Ihlali'] = "Olası Hesap Ele Geçirme"
+        df.loc[ele_gecirme_sarti, 'Kural_Skoru'] += 60
+
+        # KURAL 7: HİBRİT TESPİT (Yapay Zeka + Kural Ortak Kararı)
         kesin_tehdit_sarti = (df['Kural_Skoru'] > 0) & (df['Anomali_Durumu'] == 1)
         df.loc[kesin_tehdit_sarti, 'Kural_Ihlali'] = df.loc[kesin_tehdit_sarti, 'Kural_Ihlali'] + " (+ YZ Onaylı)"
         df.loc[kesin_tehdit_sarti, 'Kural_Skoru'] += 100

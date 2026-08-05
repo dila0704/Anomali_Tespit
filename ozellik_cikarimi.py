@@ -44,13 +44,26 @@ df['Mesai_Disi'] = df['Saat'].apply(lambda x: 0 if 8 <= x <= 18 else 1)
 df['Basarisiz_Giris_Mi'] = df['Durum'].apply(lambda x: 0 if x == 'NT_STATUS_OK' else 1)
 df['Onceki_Islem_Farki_Sn'] = df.groupby('Kullanici')['Zaman'].diff().dt.total_seconds().fillna(0)
 
+# --- IP SIÇRAMASI (IMPOSSIBLE TRAVEL) ÖZELLİĞİ ---
+# Aynı kullanıcının bir önceki işleminden kısa süre sonra (5 dk içinde) farklı
+# bir IP'den tekrar görülmesi, hesabın aynı anda birden fazla yerden
+# kullanıldığına işaret edebilir.
+df['Onceki_IP'] = df.groupby('Kullanici')['IP_Adresi'].shift(1)
+df['IP_Degisti_Hizli'] = (
+    (df['IP_Adresi'] != df['Onceki_IP']) &
+    df['Onceki_IP'].notna() &
+    (df['Onceki_Islem_Farki_Sn'] > 0) &
+    (df['Onceki_Islem_Farki_Sn'] < 300)
+).astype(int)
+df.drop(columns=['Onceki_IP'], inplace=True)
+
 # --- ZAMAN PENCERESİ (ROLLING WINDOW) ÖZELLİKLERİ ---
 df.set_index('Zaman', inplace=True)
 df['Son_10Dk_Basarisiz_Deneme'] = df.groupby('Kullanici')['Basarisiz_Giris_Mi'].transform(lambda x: x.rolling('10min').sum())
 df['Son_10Dk_IP_Islem_Sayisi'] = df.groupby('IP_Adresi')['Olay_ID'].transform(lambda x: x.rolling('10min').count())
 df.reset_index(inplace=True)
 
-sayisal_sutunlar = ['Onceki_Islem_Farki_Sn', 'Son_10Dk_Basarisiz_Deneme', 'Son_10Dk_IP_Islem_Sayisi']
+sayisal_sutunlar = ['Onceki_Islem_Farki_Sn', 'Son_10Dk_Basarisiz_Deneme', 'Son_10Dk_IP_Islem_Sayisi', 'IP_Degisti_Hizli']
 df[sayisal_sutunlar] = df[sayisal_sutunlar].fillna(0)
 
 # 4. Veritabanına Kaydetme (DELTA MANTIĞI BURADA ÇALIŞIYOR)

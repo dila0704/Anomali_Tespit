@@ -27,9 +27,10 @@ if df.empty:
 
 # 2. Özellik Seçimi
 ozellik_kolonlari = [
-    'Saat', 'Hafta_Sonu', 'Mesai_Disi', 
-    'Basarisiz_Giris_Mi', 'Onceki_Islem_Farki_Sn', 
-    'Son_10Dk_Basarisiz_Deneme', 'Son_10Dk_IP_Islem_Sayisi'
+    'Saat', 'Hafta_Sonu', 'Mesai_Disi',
+    'Basarisiz_Giris_Mi', 'Onceki_Islem_Farki_Sn',
+    'Son_10Dk_Basarisiz_Deneme', 'Son_10Dk_IP_Islem_Sayisi',
+    'IP_Degisti_Hizli'
 ]
 mevcut_kolonlar = [col for col in ozellik_kolonlari if col in df.columns]
 X = df[mevcut_kolonlar]
