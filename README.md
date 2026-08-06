@@ -90,8 +90,6 @@ flowchart TD
 | `isolation_forest_model.pkl` | Eğitilmiş Isolation Forest model dosyası |
 | `scaler.pkl` | Eğitimde kullanılan `StandardScaler` nesnesi |
 
-> Not: Repoda henüz `requirements.txt` bulunmuyor; gerekli kütüphaneler aşağıdaki Kurulum bölümünde listelenmiştir.
-
 ## ⚙️ Kurulum
 
 ```bash
@@ -101,7 +99,7 @@ cd Anomali_Tespit
 python -m venv venv
 source venv/bin/activate      # Windows: venv\Scripts\activate
 
-pip install streamlit pandas plotly scikit-learn joblib numpy rich
+pip install -r requirements.txt
 ```
 
 ## ▶️ Kullanım
@@ -234,7 +232,8 @@ Sistem, her seferinde tüm log geçmişini yeniden işlemek yerine yalnızca yen
 ## 📈 Yol Haritası Fikirleri
 
 - ~~Model yeniden eğitimini zamanlanmış (scheduled) hale getirmek~~ ✅ `model_egitimi.py` artık satır eşiğine göre kendiliğinden yeniden eğitiliyor
-- `requirements.txt` ve otomatik testler eklemek
+- ~~`requirements.txt` eklemek~~ ✅ eklendi
+- Otomatik testler eklemek
 - Dosya tabanlı simülasyon yerine gerçek zamanlı log akışı (syslog / Filebeat entegrasyonu) ile delta mimarisini gerçek kaynaklara bağlamak
 - E-posta/Slack üzerinden "Kesin Tehdit" bildirimleri (`canli_izleme.py`'daki YENİ tespit mantığı üzerine kurulabilir)
 - Otomatik yeniden eğitim eşiğini (satır sayısı) zaman bazlı veya performans bazlı (rolling F1 düşüşü) bir tetikleyiciyle desteklemek
