@@ -103,7 +103,11 @@ st.markdown(f"""
 # ============================================================
 @st.cache_data(ttl=300, show_spinner="Veriler getiriliyor...")
 def veriyi_getir():
-    baglanti = sqlite3.connect("log_veritabani.db")
+    # timeout + WAL: pipeline arka planda (canli_izleme.py döngüsü ya da
+    # elle tetiklenen taramalar) yazarken panel okuma yaparsa anında
+    # "database is locked" hatası almak yerine kısa süre beklenir.
+    baglanti = sqlite3.connect("log_veritabani.db", timeout=15)
+    baglanti.execute("PRAGMA journal_mode=WAL;")
     df = pd.read_sql("SELECT * FROM hibrit_tespit_sonuclari ORDER BY Zaman DESC LIMIT 50000", baglanti)
     baglanti.close()
     

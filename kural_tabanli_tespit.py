@@ -13,7 +13,8 @@ class HibritGuvenlikSistemi:
         if not self.delta_modu:
             return 0
         try:
-            baglanti = sqlite3.connect(self.db_yolu)
+            baglanti = sqlite3.connect(self.db_yolu, timeout=15)
+            baglanti.execute("PRAGMA journal_mode=WAL;")
             imlec = baglanti.execute(f"SELECT COUNT(*) FROM {self.hedef_tablo}")
             sayi = imlec.fetchone()[0]
             baglanti.close()
@@ -22,7 +23,8 @@ class HibritGuvenlikSistemi:
             return 0 # Tablo henüz oluşturulmadıysa 0 döndür
 
     def veriyi_getir(self, tablo_adi="model_sonuclari"):
-        baglanti = sqlite3.connect(self.db_yolu)
+        baglanti = sqlite3.connect(self.db_yolu, timeout=15)
+        baglanti.execute("PRAGMA journal_mode=WAL;")
         df = pd.read_sql(f"SELECT * FROM {tablo_adi}", baglanti)
         baglanti.close()
         return df
@@ -92,7 +94,8 @@ class HibritGuvenlikSistemi:
         toplam_satir = len(df)
         yeni_satir_sayisi = toplam_satir - mevcut_satir
 
-        baglanti = sqlite3.connect(self.db_yolu)
+        baglanti = sqlite3.connect(self.db_yolu, timeout=15)
+        baglanti.execute("PRAGMA journal_mode=WAL;")
 
         if self.delta_modu and mevcut_satir > 0 and yeni_satir_sayisi > 0:
             # Sadece yeni satırları kesip ekle

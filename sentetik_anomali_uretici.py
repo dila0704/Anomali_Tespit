@@ -3,7 +3,8 @@ import sqlite3
 import numpy as np
 
 # 1. Veritabanına Bağlan ve Orijinal Logları Çek
-baglanti = sqlite3.connect("log_veritabani.db")
+baglanti = sqlite3.connect("log_veritabani.db", timeout=15)
+baglanti.execute("PRAGMA journal_mode=WAL;")
 df_orijinal = pd.read_sql("SELECT * FROM ozellikli_loglar", baglanti)
 
 # Orijinal verilerimize "Is_Synthetic" (Sentetik mi?) adında bir etiket ekleyelim ve hepsine 0 diyelim.

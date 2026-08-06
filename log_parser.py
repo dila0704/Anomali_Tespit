@@ -94,7 +94,11 @@ if __name__ == "__main__":
     print(f"\nAyrıştırılmış Yeni Log Sayısı: {len(sonuc_df)}")
     
     # 7. Veriyi SQLite veritabanına kaydetme
-    baglanti = sqlite3.connect("log_veritabani.db")
+    # timeout + WAL: aynı anda başka bir süreç (örn. canli_izleme.py'ın arka
+    # plan döngüsü ile app.py'daki manuel tetikleme) veritabanına erişirse
+    # anında "database is locked" hatası almak yerine kısa süre beklenir.
+    baglanti = sqlite3.connect("log_veritabani.db", timeout=15)
+    baglanti.execute("PRAGMA journal_mode=WAL;")
     
     if 'Zaman' in sonuc_df.columns:
         sonuc_df['Zaman'] = sonuc_df['Zaman'].astype(str)

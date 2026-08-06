@@ -9,7 +9,10 @@ warnings.filterwarnings("ignore")
 delta_modu = "--delta" in sys.argv
 
 # 1. Veritabanına bağlan
-baglanti = sqlite3.connect("log_veritabani.db")
+# timeout + WAL: pipeline'ın diğer adımlarıyla veya canlı izleme betiğiyle
+# eşzamanlı erişimde "database is locked" hatasını önlemek için.
+baglanti = sqlite3.connect("log_veritabani.db", timeout=15)
+baglanti.execute("PRAGMA journal_mode=WAL;")
 
 # Delta modundaysak, hedef tabloda şu an kaç satır olduğunu öğrenelim
 mevcut_satir_sayisi = 0
