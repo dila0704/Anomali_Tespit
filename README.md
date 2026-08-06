@@ -228,6 +228,7 @@ Sistem, her seferinde tüm log geçmişini yeniden işlemek yerine yalnızca yen
 - **scikit-learn** — Isolation Forest, Local Outlier Factor, standardizasyon ve değerlendirme metrikleri
 - **SQLite** — hafif veri deposu
 - **joblib** — model/scaler serileştirme
+- **rich** — `kullanici_sorgula.py` CLI aracındaki renkli terminal tabloları/panelleri
 
 ## 📈 Yol Haritası Fikirleri
 
