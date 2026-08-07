@@ -2,47 +2,67 @@ import pandas as pd
 import numpy as np
 import sqlite3
 import warnings
-from sklearn.ensemble import IsolationForest
+import faiss
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import precision_score, recall_score, f1_score, confusion_matrix
 
 warnings.filterwarnings("ignore")
 
-# --- NEDEN ÇOKLU TOHUM (SEED) VE ÇOKLU CONTAMINATION? ---
-# Eski sürüm modeli TEK bir random_state (42) ve TEK bir contamination (0.02)
-# ile bir kez eğitip tek bir F1 skoru veriyordu. Bu, "şansa" bağlı, gürültülü
-# bir ölçümdür: farklı bir tohumla model biraz farklı ayrılabilir. Burada aynı
-# sentetik veri kümesi üzerinde birkaç tohumla tekrarlanan, ortalama + standart
-# sapma raporlayan ve birkaç contamination değerini karşılaştıran küçük bir
-# deney kurgusuna geçiyoruz; bu, tek noktalık bir sayıdan çok daha güvenilir
-# bir performans tahmini verir.
-TOHUMLAR = [42, 7, 123, 2024, 99]
-CONTAMINATION_ADAYLARI = [0.01, 0.02, 0.03, 0.05, 0.1]
+# --- NEDEN k-NN / FAISS DEĞERLENDİRİLİYOR? ---
+# Üretimde artık Isolation Forest değil, FAISS tabanlı k-NN mesafe eşiği
+# çalışıyor (bkz. model_egitimi.py). Bu script'in eski hâli hâlâ bağımsız
+# bir Isolation Forest eğitip ölçüyordu — bu da üretimde çalışmayan bir
+# algoritmayı test etmek anlamına gelirdi. Şimdi gerçekte çalışan yöntemin
+# aynısını (k komşu sayısı + persentil eşiği) ızgara taramasıyla ölçüyoruz.
+# Not: k-NN mesafesi (rastgele orman gibi) tohuma bağlı değildir — aynı veri
+# ve aynı k için her zaman aynı sonucu verir. Bu yüzden artık "çoklu tohum"
+# ortalaması gerekmiyor; bu, yöntemin bir dezavantajı değil, doğal bir
+# avantajıdır (sonuç şansa bağlı değil).
+KOMSU_SAYISI_ADAYLARI = [3, 5, 7, 10, 15]
+ESIK_PERSENTIL_ADAYLARI = [95, 97, 98, 99]
 
 # 1. İçinde sentetik verilerin de olduğu yeni tabloyu çekiyoruz
 baglanti = sqlite3.connect("log_veritabani.db", timeout=15)
 baglanti.execute("PRAGMA journal_mode=WAL;")
-df = pd.read_sql("SELECT * FROM ozellikli_loglar_sentetikli", baglanti)
+df_orijinal = pd.read_sql("SELECT * FROM ozellikli_loglar", baglanti)
+df_birlesik = pd.read_sql("SELECT * FROM ozellikli_loglar_sentetikli", baglanti)
 baglanti.close()
 
-# 2. Modeli Eğitmek İçin Özellikleri Hazırlama
+# 2. Özellik Hazırlama
 ozellik_kolonlari = [
     'Saat', 'Hafta_Sonu', 'Mesai_Disi',
     'Basarisiz_Giris_Mi', 'Onceki_Islem_Farki_Sn',
     'Son_10Dk_Basarisiz_Deneme', 'Son_10Dk_IP_Islem_Sayisi'
 ]
-X = df[ozellik_kolonlari]
-y_gercek = df['Is_Synthetic']
+y_gercek = df_birlesik['Is_Synthetic']
 
-# Standardizasyon (tüm denemeler için aynı ölçeklenmiş veri kullanılır)
+# Üretimdeki bootstrap mantığının birebir aynısı: scaler ve FAISS indeksi
+# yalnızca GERÇEK (sentetiksiz) veriyle kurulur — sentetik saldırganlar daha
+# sonra bu bilinen-normal indekse karşı SORGULANIR, indekse hiç eklenmez.
+# Bu, "modelin daha önce hiç görmediği yeni bir saldırıyı tanıyabiliyor mu?"
+# sorusuna gerçekçi bir cevap verir.
 scaler = StandardScaler()
-X_scaled = scaler.fit_transform(X)
+X_normal_scaled = scaler.fit_transform(df_orijinal[ozellik_kolonlari]).astype("float32")
+X_tum_scaled = scaler.transform(df_birlesik[ozellik_kolonlari]).astype("float32")
 
 
-def bir_deneme_calistir(contamination, tohum):
-    model = IsolationForest(n_estimators=200, contamination=contamination, n_jobs=1, random_state=tohum)
-    tahmin = model.fit_predict(X_scaled)
-    tahmin = np.where(tahmin == -1, 1, 0)  # -1 (anomali) -> 1 (Tehdit), 1 -> 0 (Temiz)
+def bir_deneme_calistir(k, persentil):
+    index = faiss.IndexFlatL2(X_normal_scaled.shape[1])
+    index.add(X_normal_scaled)
+
+    # Eşik: normal verinin kendi içindeki k-NN mesafe dağılımının persentili
+    # (kendisiyle eşleşmeyi hariç tutmak için k+1 sorgulanır).
+    k_esik = min(k + 1, index.ntotal)
+    mesafeler_normal, _ = index.search(X_normal_scaled, k_esik)
+    skorlar_normal = mesafeler_normal[:, 1:].mean(axis=1)
+    esik = np.percentile(skorlar_normal, persentil)
+
+    # Tüm veri (normal + sentetik saldırganlar) aynı indekse karşı sorgulanır.
+    k_sorgu = min(k, index.ntotal)
+    mesafeler_tum, _ = index.search(X_tum_scaled, k_sorgu)
+    skorlar_tum = mesafeler_tum.mean(axis=1)
+
+    tahmin = (skorlar_tum > esik).astype(int)
     return {
         "precision": precision_score(y_gercek, tahmin, zero_division=0),
         "recall": recall_score(y_gercek, tahmin, zero_division=0),
@@ -50,48 +70,48 @@ def bir_deneme_calistir(contamination, tohum):
     }
 
 
-# 3. ÇOKLU TOHUM x ÇOKLU CONTAMINATION IZGARA TARAMASI
-print(f"Yapay Zeka, {len(TOHUMLAR)} farklı tohum x {len(CONTAMINATION_ADAYLARI)} farklı "
-      f"contamination değeriyle ({len(TOHUMLAR) * len(CONTAMINATION_ADAYLARI)} deneme) test ediliyor...\n")
+# 3. K x PERSENTİL IZGARA TARAMASI
+print(f"FAISS/k-NN yöntemi, {len(KOMSU_SAYISI_ADAYLARI)} farklı komşu sayısı x "
+      f"{len(ESIK_PERSENTIL_ADAYLARI)} farklı eşik persentili ile "
+      f"({len(KOMSU_SAYISI_ADAYLARI) * len(ESIK_PERSENTIL_ADAYLARI)} deneme) test ediliyor...\n")
 
 sonuclar = []
-for contamination in CONTAMINATION_ADAYLARI:
-    for tohum in TOHUMLAR:
-        metrikler = bir_deneme_calistir(contamination, tohum)
-        sonuclar.append({"contamination": contamination, "tohum": tohum, **metrikler})
+for k in KOMSU_SAYISI_ADAYLARI:
+    for persentil in ESIK_PERSENTIL_ADAYLARI:
+        metrikler = bir_deneme_calistir(k, persentil)
+        sonuclar.append({"k": k, "persentil": persentil, **metrikler})
 
 sonuc_df = pd.DataFrame(sonuclar)
 
-# Her contamination değeri için tohumlar arası ortalama + standart sapma
-ozet = sonuc_df.groupby("contamination")[["precision", "recall", "f1"]].agg(["mean", "std"])
-
-print("--- 📈 IZGARA TARAMASI ÖZETİ (Tohumlar Arası Ortalama ± Std) ---")
-for contamination, satir in ozet.iterrows():
+print("--- 📈 IZGARA TARAMASI SONUÇLARI ---")
+for _, satir in sonuc_df.sort_values("f1", ascending=False).iterrows():
     print(
-        f"contamination={contamination:<5} | "
-        f"F1: {satir[('f1', 'mean')] * 100:5.2f}% ± {satir[('f1', 'std')] * 100:4.2f}  | "
-        f"Precision: {satir[('precision', 'mean')] * 100:5.2f}%  | "
-        f"Recall: {satir[('recall', 'mean')] * 100:5.2f}%"
+        f"k={int(satir['k']):<3} persentil={int(satir['persentil']):<3} | "
+        f"F1: {satir['f1'] * 100:5.2f}%  | "
+        f"Precision: {satir['precision'] * 100:5.2f}%  | "
+        f"Recall: {satir['recall'] * 100:5.2f}%"
     )
 
-en_iyi_contamination = ozet[("f1", "mean")].idxmax()
-en_iyi_f1_ortalama = ozet.loc[en_iyi_contamination, ("f1", "mean")]
-en_iyi_f1_std = ozet.loc[en_iyi_contamination, ("f1", "std")]
+en_iyi = sonuc_df.loc[sonuc_df["f1"].idxmax()]
+print(f"\n🏆 En yüksek F1: k={int(en_iyi['k'])}, persentil={int(en_iyi['persentil'])} "
+      f"(F1 = %{en_iyi['f1'] * 100:.2f}, Precision = %{en_iyi['precision'] * 100:.2f}, "
+      f"Recall = %{en_iyi['recall'] * 100:.2f})")
+print(f"ℹ️  model_egitimi.py içindeki KOMSU_SAYISI (şu an 5) ve ESIK_PERSENTIL (şu an 98) "
+      f"değerleri bu sonuca göre gözden geçirilebilir; bu script değerleri otomatik değiştirmez, "
+      f"karar insana bırakılır.")
 
-print(f"\n🏆 En yüksek ortalama F1: contamination={en_iyi_contamination} "
-      f"(F1 = %{en_iyi_f1_ortalama * 100:.2f} ± {en_iyi_f1_std * 100:.2f})")
-print(f"ℹ️  model_egitimi.py içindeki contamination değeri (şu an 0.02) bu sonuca göre "
-      f"gözden geçirilebilir; bu script değeri otomatik değiştirmez, karar insana bırakılır.")
+# 4. En iyi (k, persentil) kombinasyonu için karmaşıklık matrisi
+index_final = faiss.IndexFlatL2(X_normal_scaled.shape[1])
+index_final.add(X_normal_scaled)
+k_esik = min(int(en_iyi["k"]) + 1, index_final.ntotal)
+mesafeler_normal, _ = index_final.search(X_normal_scaled, k_esik)
+esik_final = np.percentile(mesafeler_normal[:, 1:].mean(axis=1), en_iyi["persentil"])
+k_sorgu = min(int(en_iyi["k"]), index_final.ntotal)
+mesafeler_tum, _ = index_final.search(X_tum_scaled, k_sorgu)
+tahmin_final = (mesafeler_tum.mean(axis=1) > esik_final).astype(int)
+karmasiklik_matrisi = confusion_matrix(y_gercek, tahmin_final)
 
-# 4. Karmaşıklık matrisini, en iyi contamination + ilk tohumla (42) tek bir
-# örnek üzerinden göstermeye devam edelim (yorumlanabilirlik için).
-ornek_tahmin = IsolationForest(
-    n_estimators=200, contamination=en_iyi_contamination, n_jobs=1, random_state=42
-).fit_predict(X_scaled)
-ornek_tahmin = np.where(ornek_tahmin == -1, 1, 0)
-karmasiklik_matrisi = confusion_matrix(y_gercek, ornek_tahmin)
-
-print(f"\nKarmaşıklık Matrisi (contamination={en_iyi_contamination}, tohum=42 örneği):")
+print(f"\nKarmaşıklık Matrisi (k={int(en_iyi['k'])}, persentil={int(en_iyi['persentil'])}):")
 print("[[Gerçek Negatif(TN)  Yanlış Pozitif(FP)]")
 print(" [Yanlış Negatif(FN)  Gerçek Pozitif(TP)]]")
 print(karmasiklik_matrisi)
