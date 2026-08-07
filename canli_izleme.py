@@ -27,8 +27,12 @@ import time
 from datetime import datetime
 
 DB_YOLU = "log_veritabani.db"
-YENILEME_SANIYE = 5        # sayfanın kendini yenileme sıklığı
-ANALIZ_DONGU_SANIYE = 10   # arka plan analiz motorunun yeni log tarama sıklığı
+YENILEME_SANIYE = 5      # sayfanın kendini yenileme sıklığı
+# Analiz motoru artık sabit bir bekleme süresiyle "aralıklarla" değil, sürekli
+# çalışıyor: her tur bitince hemen yeni turu başlatıyor. Aşağıdaki değer bir
+# "tarama periyodu" değil, boşta (işlenecek yeni log yokken) CPU'yu sıfır
+# beklemeyle boşuna meşgul etmemek için bırakılan minik bir güvenlik payı.
+ANALIZ_DONGU_MIN_BEKLEME_SN = 1
 
 st.set_page_config(page_title="Canlı Anomali İzleme", page_icon="🚨", layout="centered")
 
@@ -55,7 +59,12 @@ def arka_plan_analiz_dongusu():
             subprocess.run([sys.executable, "pipeline_calistir.py"], check=False)
         except Exception as hata:
             print(f"[Canlı İzleme] Analiz döngüsünde hata: {hata}")
-        time.sleep(ANALIZ_DONGU_SANIYE)
+        # Yeni veri varken bu döngü zaten bir sonraki turu hemen başlatıyor
+        # (aradaki süre, o turun işlenme/eğitim süresi kadar). Yeni log yoksa
+        # log_parser.py anında kısa devre yapıp döner; bu durumda döngünün
+        # CPU'yu boşuna meşgul eden bir spin-loop'a dönüşmemesi için minik
+        # bir bekleme bırakılıyor — bu bir "tarama aralığı" değildir.
+        time.sleep(ANALIZ_DONGU_MIN_BEKLEME_SN)
 
 
 @st.cache_resource(show_spinner=False)
@@ -109,7 +118,7 @@ yeni_idler = mevcut_idler - st.session_state["gorulen_idler"]
 st.markdown("## 🚨 Canlı Anomali İzleme")
 st.caption(
     f"Son kontrol: {datetime.now().strftime('%H:%M:%S')} · "
-    f"Analiz motoru arka planda {ANALIZ_DONGU_SANIYE} sn'de bir yeni logları tarıyor"
+    f"Analiz motoru arka planda sürekli çalışıyor (yeni log geldiği an işleniyor)"
 )
 
 

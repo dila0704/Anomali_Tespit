@@ -18,7 +18,7 @@ Gerçek dünyada etiketli anomali verisi bulunmadığından proje, modelin başa
 - **Delta (artımlı) okuma mimarisi:** `bookmark.txt` ile log dosyasındaki son okunan byte konumu takip edilir; her adım (`log_parser.py`, `ozellik_cikarimi.py`, `model_egitimi.py`, `kural_tabanli_tespit.py`) sadece yeni kayıtları işleyip veritabanına **ekler (append)**, tüm veriyi yeniden işlemez
 - **Kısa devre (short-circuit) mantığı:** İşlenecek yeni log yoksa betikler `exit code 99` ile çıkar, `pipeline_calistir.py` bu durumu yakalayıp kalan adımları atlayarak süreci güvenle sonlandırır
 - **Eğitim / Tahmin modu ayrımı:** Tam taramada (`--tam-tarama`) Isolation Forest sıfırdan eğitilip `.pkl` olarak diske kaydedilir; delta modunda ise model diskten yüklenip sadece yeni kayıtlar için hızlı tahmin (`predict`) yapılır, yeniden eğitim yapılmaz
-- **Otomatik yeniden eğitim (concept drift koruması):** `model_egitimi.py`, `--delta` ile çağrılsa bile son eğitimden bu yana biriken satır sayısı bir eşiği (varsayılan 5000) aşarsa modeli kendiliğinden sıfırdan yeniden eğitir; her eğitim `model_egitim_gecmisi` tablosuna (zaman, satır sayısı, Silhouette skoru) kaydedilir, model asla süresiz donuk kalmaz
+- **Sürekli eğitim (concept drift koruması):** `model_egitimi.py`, işlenecek yeni veri olduğu her turda modeli sıfırdan yeniden eğitir — belirli bir satır birikimini beklemez; her eğitim `model_egitim_gecmisi` tablosuna (zaman, satır sayısı, Silhouette skoru) kaydedilir, model hiçbir zaman bayat kalmaz
 - **Sürekli çalışan canlı izleme sayfası:** `canli_izleme.py`, arka planda `pipeline_calistir.py`'ı düzenli aralıklarla kendiliğinden çalıştırır ve ekranda sadece anomalileri gösterir; bir anomali bir kez görüldükten sonra tekrar "yeni" olarak flaşlanmaz, sadece gerçekten yeni tespitler öne çıkar
 - **Pipeline gözlemlenebilirliği:** Her pipeline adımının süresi ve durumu (`Başarılı` / `Yeni Veri Yok` / `Hata`) `pipeline_calismalari` tablosuna otomatik loglanır
 - **Eşzamanlı erişim güvenliği:** Tüm veritabanı bağlantılarında SQLite WAL modu + zaman aşımı (timeout) kullanılır; arka plan izleme döngüsü ile manuel bir tarama aynı anda çalışsa bile "database is locked" hatası alınmaz
@@ -43,7 +43,7 @@ flowchart TD
     BM["bookmark.txt\n(son okunan byte offset)"] -.->|"--delta modunda okunur ve güncellenir"| C
     B --> C["log_parser.py\nJSON -> DataFrame\n(--delta: sadece yeni satırlar)"]
     C -->|"append/replace: anomali_loglari"| D["ozellik_cikarimi.py\nZaman + davranışsal özellikler\n(--delta: sadece yeni satırlar)"]
-    D -->|"append/replace: ozellikli_loglar"| E["model_egitimi.py\nIsolation Forest\n(--delta yok: Eğitim · --delta: Tahmin)"]
+    D -->|"append/replace: ozellikli_loglar"| E["model_egitimi.py\nIsolation Forest\n(her turda sıfırdan sürekli eğitim)"]
     E -->|"replace: model_sonuclari"| F["kural_tabanli_tespit.py\nHibritGuvenlikSistemi\n(--delta: sadece yeni satırlar)"]
     F -->|"append/replace: hibrit_tespit_sonuclari"| G["app.py\nSOC Streamlit Paneli"]
     F -->|"append/replace: hibrit_tespit_sonuclari"| G2["canli_izleme.py\nSürekli döngü + sade uyarı sayfası"]
@@ -62,7 +62,7 @@ flowchart TD
 1. **Üretim / Alım:** `log_uretici.py` gerçekçi Samba audit logları üretir (veya gerçek bir Samba audit log dosyası kullanılabilir).
 2. **Ayrıştırma:** `log_parser.py`, delta modunda `bookmark.txt`'teki byte konumundan itibaren dosyayı okuyup sadece yeni JSON satırlarını ayrıştırır ve SQLite'a (`anomali_loglari`) **ekler**; tam taramada dosyayı baştan okuyup tabloyu yeniden yazar.
 3. **Özellik Mühendisliği:** `ozellik_cikarimi.py` zaman bazlı (saat, hafta sonu, mesai dışı) ve davranışsal (kayan pencere) özellikler üretir → `ozellikli_loglar`; delta modunda sadece yeni satırları işleyip ekler.
-4. **Model Eğitimi / Tahmini:** `model_egitimi.py`, tam taramada bu özelliklerle bir Isolation Forest eğitip modeli/scaler'ı `.pkl` olarak dışa aktarır; delta modunda ise diskteki modeli yükleyip sadece yeni kayıtlar için hızlı tahmin yapar → `model_sonuclari`. Ayrıca `--delta` ile çağrılsa bile, son eğitimden bu yana yeterince yeni veri birikmişse (`model_egitim_gecmisi` tablosuna bakarak) kendiliğinden tam yeniden eğitime geçer.
+4. **Sürekli Model Eğitimi:** `model_egitimi.py`, çağrıldığı her turda (delta ya da tam tarama fark etmeksizin) güncel `ozellikli_loglar` verisiyle bir Isolation Forest'ı sıfırdan eğitir ve modeli/scaler'ı `.pkl` olarak dışa aktarır → `model_sonuclari`. Belirli bir veri birikimini bekleyen bir eşik yoktur; pipeline zaten yeni veri olmadan bu adıma hiç gelmez (bkz. Kısa devre), o yüzden buraya gelindiğinde eğitim her zaman güncel veriyle tekrarlanır.
 5. **Kural Motoru & Hibrit Karar:** `kural_tabanli_tespit.py`, sabit kurallarla model çıktısını birleştirip nihai risk skorunu hesaplar; delta modunda sadece yeni satırları işleyip `hibrit_tespit_sonuclari` tablosuna ekler.
 6. **Görselleştirme:** `app.py`, bu son tabloyu okuyup SOC temalı, sekmeli bir Streamlit panelinde (Genel Pano + Kullanıcı/IP bazlı UBA profili) sunar. `canli_izleme.py` ise bağımsız, ikinci bir arayüz olarak aynı tabloyu izler; arka planda pipeline'ı sürekli döngüde kendiliğinden tetikler ve ekranda sadece (yeni/görülmüş ayrımı yapılmış) anomalileri gösterir.
 7. **Kısa devre:** Herhangi bir adımda işlenecek yeni veri yoksa ilgili betik `exit code 99` ile çıkar; `pipeline_calistir.py` bunu algılayıp kalan adımları atlayarak süreci hatasız sonlandırır. Her adımın süresi ve sonucu ayrıca `pipeline_calismalari` tablosuna loglanır.
@@ -82,7 +82,7 @@ flowchart TD
 | `bookmark.txt` | Delta modunda log dosyasında en son okunan byte konumunu tutan takip dosyası (tam taramada sıfırlanır) |
 | `ozellik_cikarimi.py` | Zaman ve davranışsal (rolling window) özellik mühendisliği; `--delta` ile sadece yeni satırları işler |
 | `sentetik_anomali_uretici.py` | Değerlendirme amaçlı etiketli (bilinen) sahte saldırı kayıtları üretir |
-| `model_egitimi.py` | Isolation Forest modelini eğitir/`.pkl` olarak dışa aktarır (tam tarama) veya diskteki modelle hızlı tahmin yapar (`--delta`); son eğitimden bu yana biriken satır sayısı bir eşiği aşarsa `--delta` ile çağrılsa dahi otomatik yeniden eğitir ve `model_egitim_gecmisi` tablosuna kaydeder |
+| `model_egitimi.py` | Çağrıldığı her turda Isolation Forest'ı güncel veriyle sıfırdan eğitir, `.pkl` olarak dışa aktarır ve eğitimi `model_egitim_gecmisi` tablosuna kaydeder (birikim eşiği beklemez, sürekli eğitim) |
 | `lof_model_denemesi.py` | Karşılaştırma amaçlı Local Outlier Factor (LOF) modeli |
 | `metrikleri_hesapla.py` | Sentetik veriyle, birden fazla tohum × `contamination` denemesi üzerinden ortalama ± std Precision / Recall / F1 / karmaşıklık matrisi hesaplar |
 | `kural_tabanli_tespit.py` | Kural motoru + kural/YZ hibrit karar mantığı (`HibritGuvenlikSistemi` sınıfı); `--delta` ile sadece yeni satırları işleyip ekler |
@@ -151,7 +151,7 @@ Panel içindeki **"🚀 Yeni Logları İncele (Delta)"** butonu, `pipeline_calis
 streamlit run canli_izleme.py
 ```
 
-Bu sayfa `app.py`'deki zengin panodan bağımsızdır ve elle tetiklemeye ihtiyaç duymaz: açılır açılmaz arka planda bir thread üzerinden `pipeline_calistir.py`'ı düzenli aralıklarla (varsayılan 10 saniye) kendiliğinden çalıştırır ve kendisi de düzenli aralıklarla (varsayılan 5 saniye) yenilenir. Ekranda sadece o an var olan anomaliler listelenir; anomali yoksa "sistem temiz" mesajı gösterilir. Bir anomali bu sayfada bir kez gösterildikten sonra "görülmüş" sayılır — aynı kayıt her yenilemede tekrar alarm olarak flaşlanmaz, sadece gerçekten yeni tespitler "🆕 YENİ" etiketiyle öne çıkar. İlk çalıştırmadan önce en az bir kez `python pipeline_calistir.py --tam-tarama` ile eğitilmiş bir model bulunmalıdır.
+Bu sayfa `app.py`'deki zengin panodan bağımsızdır ve elle tetiklemeye ihtiyaç duymaz: açılır açılmaz arka planda bir thread üzerinden `pipeline_calistir.py`'ı **sürekli** çalıştırır — bir tur biter bitmez bir sonraki tur hemen başlar, sabit bir "X saniyede bir tara" beklemesi yoktur. İşlenecek yeni log yoksa bir tur zaten anında kısa devre ile biter (bkz. Kısa Devre); yeni log varsa o an işlenip modele de hemen yansıtılır (bkz. Sürekli Eğitim). Sayfanın kendisi de düzenli aralıklarla (varsayılan 5 saniye) yenilenip en güncel sonuçları gösterir. Ekranda sadece o an var olan anomaliler listelenir; anomali yoksa "sistem temiz" mesajı gösterilir. Bir anomali bu sayfada bir kez gösterildikten sonra "görülmüş" sayılır — aynı kayıt her yenilemede tekrar alarm olarak flaşlanmaz, sadece gerçekten yeni tespitler "🆕 YENİ" etiketiyle öne çıkar. İlk çalıştırmadan önce en az bir kez `python pipeline_calistir.py --tam-tarama` ile eğitilmiş bir model bulunmalıdır.
 
 ### 4. (Opsiyonel) Bir kullanıcıyı terminalde sorgulayın
 
@@ -183,8 +183,7 @@ Sistem, her seferinde tüm log geçmişini yeniden işlemek yerine yalnızca yen
 
 - **Byte-offset takibi:** `log_parser.py`, `--delta` bayrağıyla çalıştığında `bookmark.txt` içindeki son okunan byte konumundan (`file.seek`) devam eder ve okuma bitince yeni konumu tekrar `bookmark.txt`'e yazar.
 - **Satır sayısı farkı ile delta tespiti:** `ozellik_cikarimi.py` ve `kural_tabanli_tespit.py`, önceki adımdaki tablo ile mevcut tablo arasındaki satır sayısı farkına (`toplam_satir - mevcut_satir`) bakarak yalnızca yeni satırları işleyip hedef tabloya **append** eder. `kural_tabanli_tespit.py` bu farkı `model_sonuclari` tablosuna göre hesapladığı için, `model_egitimi.py` pipeline'da ondan **önce** çalışmak zorundadır — aksi halde bayat veri okunur ve pipeline yanlışlıkla "yeni veri yok" sanıp erken durur.
-- **Eğitim vs. Tahmin:** `model_egitimi.py`, tam taramada (`--tam-tarama`) modeli sıfırdan eğitip diske kaydeder ve Silhouette skorunu hesaplar; delta modunda ise diskteki `.pkl` dosyalarını yükleyip sadece `transform` + `predict` çalıştırır (yeniden `fit` yapılmaz), bu da işlem süresini önemli ölçüde kısaltır.
-- **Otomatik yeniden eğitim eşiği:** `model_egitimi.py`, `model_egitim_gecmisi` tablosundaki son eğitim satır sayısıyla mevcut `ozellikli_loglar` satır sayısını karşılaştırır; fark `RETRAIN_ESIK_SATIR` (varsayılan 5000) değerini aşarsa `--delta` ile çağrılmış olsa bile modeli sıfırdan yeniden eğitir. Bu, modelin süresiz donuk kalmasını (concept drift) önler; dezavantajı, veri hacmi büyüdükçe her yeniden eğitimin süresinin de uzamasıdır (tam veri üzerinde `fit` yapıldığı için).
+- **Sürekli eğitim:** `model_egitimi.py`, `--delta` ile çağrılsa da çağrılmasa da, çalıştığı her turda modeli güncel `ozellikli_loglar` verisiyle sıfırdan eğitir ve Silhouette skorunu hesaplar; "belirli bir satır birikince eğit" gibi bir eşik veya bekleme yoktur. Bunun bilinen dezavantajı, veri hacmi büyüdükçe her turdaki `fit` süresinin de uzamasıdır (tam veri üzerinde eğitildiği için) — pipeline turları bu yüzden zamanla doğal olarak uzayabilir; bu, sabit bir "X saniyede bir" beklemesinden değil, işin kendisinin büyümesinden kaynaklanır.
 - **Kısa devre (short-circuit):** İşlenecek yeni veri olmayan bir adım `exit code 99` ile çıkar; `pipeline_calistir.py` bu kodu özel olarak yakalayıp geri kalan adımları atlar ve süreci hatasız olarak sonlandırır. `--tam-tarama` çalıştırıldığında ise tüm tablolar baştan yazılır (`replace`) ve `bookmark.txt` sıfırlanır.
 - **Eşzamanlı erişim güvenliği:** Tüm `sqlite3.connect` çağrılarında `PRAGMA journal_mode=WAL` ve `timeout=15` kullanılır; böylece `canli_izleme.py`'ın arka plan döngüsü ile `app.py`'daki manuel tetikleme veya elle çalıştırılan bir `pipeline_calistir.py` aynı anda veritabanına erişse bile anında "database is locked" hatası alınmaz, kısa bir süre beklenip devam edilir.
 
@@ -214,7 +213,7 @@ Sistem, her seferinde tüm log geçmişini yeniden işlemek yerine yalnızca yen
 | `hibrit_tespit_sonuclari` | `kural_tabanli_tespit.py` | Nihai hibrit karar (panelde kullanılır, delta modunda append edilir) |
 | `lof_model_sonuclari` | `lof_model_denemesi.py` | LOF karşılaştırma sonuçları |
 | `ozellikli_loglar_sentetikli` | `sentetik_anomali_uretici.py` | Etiketli sentetik saldırı verisiyle zenginleştirilmiş veri |
-| `model_egitim_gecmisi` | `model_egitimi.py` | Her tam eğitimin zamanı, eğitildiği satır sayısı ve Silhouette skoru (otomatik yeniden eğitim kararı bu tablodan verilir) |
+| `model_egitim_gecmisi` | `model_egitimi.py` | Her eğitim turunun zamanı, eğitildiği satır sayısı ve Silhouette skoru (zamanla model kalitesini izlemek için) |
 | `pipeline_calismalari` | `pipeline_calistir.py` | Her pipeline adımının çalışma zamanı, süresi (sn) ve durumu (`Başarılı` / `Yeni Veri Yok` / `Hata`) — pipeline'ın kendi sağlığını izlemek için |
 
 > `bookmark.txt`, bir SQLite tablosu değildir; delta modunda `log_parser.py`'ın log dosyasında en son okuduğu byte konumunu tutan ayrı bir takip dosyasıdır.
@@ -232,12 +231,12 @@ Sistem, her seferinde tüm log geçmişini yeniden işlemek yerine yalnızca yen
 
 ## 📈 Yol Haritası Fikirleri
 
-- ~~Model yeniden eğitimini zamanlanmış (scheduled) hale getirmek~~ ✅ `model_egitimi.py` artık satır eşiğine göre kendiliğinden yeniden eğitiliyor
+- ~~Model yeniden eğitimini zamanlanmış (scheduled) hale getirmek~~ ✅ `model_egitimi.py` artık her turda sürekli/kendiliğinden yeniden eğitiliyor (eşik veya bekleme yok)
 - ~~`requirements.txt` eklemek~~ ✅ eklendi
 - Otomatik testler eklemek
 - Dosya tabanlı simülasyon yerine gerçek zamanlı log akışı (syslog / Filebeat entegrasyonu) ile delta mimarisini gerçek kaynaklara bağlamak
 - E-posta/Slack üzerinden "Kesin Tehdit" bildirimleri (`canli_izleme.py`'daki YENİ tespit mantığı üzerine kurulabilir)
-- Otomatik yeniden eğitim eşiğini (satır sayısı) zaman bazlı veya performans bazlı (rolling F1 düşüşü) bir tetikleyiciyle desteklemek
+- Veri hacmi büyüdükçe her turdaki tam `fit` süresi de uzuyor; ileride gerçek online/incremental öğrenme (örn. River kütüphanesi ile) değerlendirilebilir
 
 ## 📄 Lisans
 
